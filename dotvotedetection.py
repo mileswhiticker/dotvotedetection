@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import time
+import statistics
 
 #print(cv2.__version__)
 
@@ -187,15 +188,18 @@ def generate_contours(src_image, do_debug):
     contours_trimmed = []
     area_threshold = 500
     testimg = np.zeros(image.shape, image.dtype)
+    xdistr = []
     for i in range(0, len(contours)):
         #if it's too small to be a dot, it must be an artefact
         area = cv2.contourArea(contours[i])
+        x,y,w,h = cv2.boundingRect(contours[i])
         #print("area:" + str(area))
         if(do_debug):
-            x,y,w,h = cv2.boundingRect(contours[i])
             cv2.rectangle(testimg,(x,y),(x+w,y+h),(0,200,0),1)
         if(area > area_threshold):
             contours_trimmed.append(contours[i])
+            xcentre = x + w/2
+            xdistr.append(xcentre)
     
     if(do_debug):
         print("contours_trimmed:" + str(len(contours_trimmed)))
@@ -206,21 +210,25 @@ def generate_contours(src_image, do_debug):
             #x,y,w,h = cv2.boundingRect(contours_trimmed[i])
             #cv2.rectangle(testimg,(x,y),(x+w,y+h),(0,200,0),1)
         cv2.imwrite("zzz_testimage.png", testimg)
-    return contours_trimmed
 
-def count_contours(src_image):
-    return len(generate_contours(src_image, False))
+    return contours_trimmed,xdistr
 
-def count_all_contours():
-    num_blue = count_contours(globals()["blue_stickers_processed"])
-    num_green = count_contours(globals()["green_stickers_processed"])
-    num_red = count_contours(globals()["red_stickers_processed"])
-    num_yellow = count_contours(globals()["yellow_stickers_processed"])
-    print("Number of blue dots: " + str(num_blue))
-    print("Number of green dots: " + str(num_green))
-    print("Number of yellow dots: " + str(num_yellow))
-    print("Number of red dots: " + str(num_red))
+def get_dots_info(src_image):
+    contours,xdistr = generate_contours(src_image, False)
+    global width
+    medianval_normalised = round(100*statistics.median(xdistr) / width)
+    stdev_normalised = round(100*statistics.stdev(xdistr) / width)
+    return "" + str(len(contours)) + ", median value: " + str(medianval_normalised) + "% standard deviation: " + str(stdev_normalised) + "%"
 
+def get_all_dots_info():
+    blue_info = get_dots_info(globals()["blue_stickers_processed"])
+    green_info = get_dots_info(globals()["green_stickers_processed"])
+    red_info = get_dots_info(globals()["red_stickers_processed"])
+    yellow_info = get_dots_info(globals()["yellow_stickers_processed"])
+    print("Blue dots: " + blue_info)
+    print("Green dots: " + green_info)
+    print("Red dots: " + red_info)
+    print("Yellow dots: " + yellow_info)
 
 
 #carry out our operations... uncomment them as necessary
@@ -228,7 +236,7 @@ def count_all_contours():
 #load_dots()
 #dilate_dots()  #this one is unneeded
 #morph_dots()
-#load_dots_processed()
+load_dots_processed()
 #generate_contours(globals()["red_stickers_processed"], True)
-#count_all_contours()
+get_all_dots_info()
 
