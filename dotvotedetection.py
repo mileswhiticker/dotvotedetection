@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import time
 
+#print(cv2.__version__)
+
 #blue dot sticker: (1,62,168) RGB
 #green dot sticker: (2,58,33) RGB
 #red dot sticker: (140,34,38) RGB
@@ -43,8 +45,13 @@ green_stickers_image = np.zeros(image.shape, image.dtype)
 red_stickers_image = np.zeros(image.shape, image.dtype)
 yellow_stickers_image = np.zeros(image.shape, image.dtype)
 
-def export_dots():
+blue_stickers_processed = np.zeros(image.shape, image.dtype)
+green_stickers_processed = np.zeros(image.shape, image.dtype)
+red_stickers_processed = np.zeros(image.shape, image.dtype)
+yellow_stickers_processed = np.zeros(image.shape, image.dtype)
 
+def export_dots():
+    print("Exporting coloured dots from \'dotvotes_trimmed.jpg\', please wait")
     #write over these with the dot stickers we find
     #this function should take about 1-2 minutes so i added timing to help track it
     global blue_stickers_image
@@ -111,71 +118,117 @@ def export_dots():
 
     time_taken = last_time - start_time
     print("Completed. Time taken: " + str(round(time_taken)) + " seconds")
-
-    cv2.imwrite("blue_stickers_image.jpg", blue_stickers_image)
-    cv2.imwrite("green_stickers_image.jpg", green_stickers_image)
-    cv2.imwrite("red_stickers_image.jpg", red_stickers_image)
-    cv2.imwrite("yellow_stickers_image.jpg", yellow_stickers_image)
+    
+    globals()["blue_stickers_image"] = blue_stickers_image
+    globals()["green_stickers_image"] = green_stickers_image
+    globals()["red_stickers_image"] = red_stickers_image
+    globals()["yellow_stickers_image"] = yellow_stickers_image
+    
+    cv2.imwrite("blue_stickers_image.png", blue_stickers_image)
+    cv2.imwrite("green_stickers_image.png", green_stickers_image)
+    cv2.imwrite("red_stickers_image.png", red_stickers_image)
+    cv2.imwrite("yellow_stickers_image.png", yellow_stickers_image)
 
 def load_dots():
-    blue_stickers_image = cv2.imread('blue_stickers_image.jpg')
-    green_stickers_image = cv2.imread('green_stickers_image.jpg')
-    red_stickers_image = cv2.imread('red_stickers_image.jpg')
-    yellow_stickers_image = cv2.imread('yellow_stickers_image.jpg')
+    globals()["blue_stickers_image"] = cv2.imread('blue_stickers_image.png')
+    globals()["green_stickers_image"] = cv2.imread('green_stickers_image.png')
+    globals()["red_stickers_image"] = cv2.imread('red_stickers_image.png')
+    globals()["yellow_stickers_image"] = cv2.imread('yellow_stickers_image.png')
+
+def load_dots_processed():
+    globals()["blue_stickers_processed"] = cv2.imread('blue_stickers_processed.png')
+    globals()["green_stickers_processed"] = cv2.imread('green_stickers_processed.png')
+    globals()["red_stickers_processed"] = cv2.imread('red_stickers_processed.png')
+    globals()["yellow_stickers_processed"] = cv2.imread('yellow_stickers_processed.png')
+
+def morph_dots():
+    #an ellipse shape for our operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(10,10))
+    
+    #carry out our operations
+    #morph_close is dilation followed by erosion
+    #morph_open is erosion followed by dilation
+    globals()["blue_stickers_processed"] = cv2.morphologyEx(blue_stickers_image, cv2.MORPH_OPEN, kernel)
+    globals()["green_stickers_processed"] = cv2.morphologyEx(green_stickers_image, cv2.MORPH_OPEN, kernel)
+    globals()["red_stickers_processed"] = cv2.morphologyEx(red_stickers_image, cv2.MORPH_OPEN, kernel)
+    globals()["yellow_stickers_processed"] = cv2.morphologyEx(yellow_stickers_image, cv2.MORPH_OPEN, kernel)
+    
+    #export the finished images
+    cv2.imwrite("blue_stickers_processed.png", globals()["blue_stickers_processed"])
+    cv2.imwrite("green_stickers_processed.png", globals()["green_stickers_processed"])
+    cv2.imwrite("red_stickers_processed.png", globals()["red_stickers_processed"])
+    cv2.imwrite("yellow_stickers_processed.png", globals()["yellow_stickers_processed"])
 
 def dilate_dots():
-    global blue_stickers_image
-    global green_stickers_image
-    global red_stickers_image
-    global yellow_stickers_image
+    #the dilation operation will fill in any random holes or gaps to make a "smooth" image    
+    #an ellipse shape for our operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+    
+    #carry out our operations
+    globals()["blue_stickers_processed"] = cv2.dilate(blue_stickers_image, kernel)
+    globals()["green_stickers_processed"] = cv2.dilate(green_stickers_image, kernel)
+    globals()["red_stickers_processed"] = cv2.dilate(red_stickers_image, kernel)
+    globals()["yellow_stickers_processed"] = cv2.dilate(yellow_stickers_image, kernel)
+    
+    #export the finished images
+    cv2.imwrite("blue_stickers_processed.png", blue_stickers_image)
+    cv2.imwrite("green_stickers_processed.png", green_stickers_image)
+    cv2.imwrite("red_stickers_processed.png", red_stickers_image)
+    cv2.imwrite("yellow_stickers_processed.png", yellow_stickers_image)
 
-    #the dilation operation will fill in any random holes or gaps to make a "smooth" image
+def generate_contours(src_image, do_debug):
+    #WIP
+    threshold = 1
+    src_gray = cv2.cvtColor(src_image, cv2.COLOR_BGR2GRAY)
+    canny_output = cv2.Canny(src_gray, threshold, threshold * 2)
+    contours,heirarchy = cv2.findContours(canny_output, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+    #loop over the array and remove any extraneous contours which are too small
+    contours_trimmed = []
+    area_threshold = 500
+    testimg = np.zeros(image.shape, image.dtype)
+    for i in range(0, len(contours)):
+        #if it's too small to be a dot, it must be an artefact
+        area = cv2.contourArea(contours[i])
+        #print("area:" + str(area))
+        if(do_debug):
+            x,y,w,h = cv2.boundingRect(contours[i])
+            cv2.rectangle(testimg,(x,y),(x+w,y+h),(0,200,0),1)
+        if(area > area_threshold):
+            contours_trimmed.append(contours[i])
+    
+    if(do_debug):
+        print("contours_trimmed:" + str(len(contours_trimmed)))
+        print("contours:" + str(len(contours)))
+        
+        #for i in range(1, len(contours_trimmed)):
+            #print(cv2.contourArea(contours_trimmed[i]))
+            #x,y,w,h = cv2.boundingRect(contours_trimmed[i])
+            #cv2.rectangle(testimg,(x,y),(x+w,y+h),(0,200,0),1)
+        cv2.imwrite("zzz_testimage.png", testimg)
+    return contours_trimmed
+
+def count_contours(src_image):
+    return len(generate_contours(src_image, False))
+
+def count_all_contours():
+    num_blue = count_contours(globals()["blue_stickers_processed"])
+    num_green = count_contours(globals()["green_stickers_processed"])
+    num_red = count_contours(globals()["red_stickers_processed"])
+    num_yellow = count_contours(globals()["yellow_stickers_processed"])
+    print("Number of blue dots: " + str(num_blue))
+    print("Number of green dots: " + str(num_green))
+    print("Number of yellow dots: " + str(num_yellow))
+    print("Number of red dots: " + str(num_red))
 
 
-#carry out our operations
-#export_dots()  #only need to do this once
-load_dots()
-dilate_dots()
 
-#cv2.imshow('blue_stickers_image', blue_stickers_image)
-#cv2.imshow('green_stickers_image', green_stickers_image)
-#cv2.imshow('red_stickers_image', red_stickers_image)
-#cv2.imshow('yellow_stickers_image', yellow_stickers_image)
-cv2.waitKey()
+#carry out our operations... uncomment them as necessary
+#export_dots()
+#load_dots()
+#dilate_dots()  #this one is unneeded
+#morph_dots()
+#load_dots_processed()
+#generate_contours(globals()["red_stickers_processed"], True)
+#count_all_contours()
 
-
-
-
-
-
-
-###EXAMPLE CODE###
-
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-
-# Filter out large non-connecting objects
-cnts = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-for c in cnts:
-    area = cv2.contourArea(c)
-    if area < 500:
-        cv2.drawContours(thresh,[c],0,0,-1)
-
-# Morph open using elliptical shaped kernel
-kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
-opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=3)
-
-# Find circles 
-cnts = cv2.findContours(opening, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-for c in cnts:
-    area = cv2.contourArea(c)
-    if area > 20 and area < 50:
-        ((x, y), r) = cv2.minEnclosingCircle(c)
-        cv2.circle(image, (int(x), int(y)), int(r), (36, 255, 12), 2)
-
-#cv2.imshow('thresh', thresh)
-#cv2.imshow('opening', opening)
-#cv2.imshow('Dot votes image', image)
-#cv2.waitKey()
